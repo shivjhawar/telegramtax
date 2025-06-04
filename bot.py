@@ -1,5 +1,4 @@
 import os
-from threading import Thread
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
@@ -21,7 +20,8 @@ def main():
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("tax", tax))
 
-    Thread(target=run_flask).start()
-
     updater.start_polling()
     updater.idle()
+
+if __name__ == '__main__':
+    main()
