@@ -10,10 +10,11 @@ app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise RuntimeError("Error: BOT_TOKEN not set")
+    print("Error: BOT_TOKEN not set")
+    exit(1)
 
 bot = Bot(token=BOT_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=4)  # workers > 0 for async callbacks
+dispatcher = Dispatcher(bot, None, workers=0)
 
 def fetch_taxindiaonline():
     url = "https://taxindiaonline.com/RC2/TaxNews.asp"
@@ -23,17 +24,24 @@ def fetch_taxindiaonline():
     news_items = []
     for a_tag in soup.select("table tr td a")[:5]:
         title = a_tag.text.strip()
-        link = "https://taxindiaonline.com/RC2/" + a_tag.get('href')
-        news_items.append(f"{title}\n{link}")
+        href = a_tag.get('href')
+        if href:
+            link = "https://taxindiaonline.com/RC2/" + href
+            news_items.append(f"{title}\n{link}")
+        else:
+            news_items.append(f"{title} (No link found)")
     return news_items
 
 def fetch_rss_feed(feed_url, max_items=5):
     news_items = []
     feed = feedparser.parse(feed_url)
     for entry in feed.entries[:max_items]:
-        title = entry.title
-        link = entry.link
-        news_items.append(f"{title}\n{link}")
+        title = entry.get("title", "No Title")
+        link = entry.get("link", "")
+        if link:
+            news_items.append(f"{title}\n{link}")
+        else:
+            news_items.append(f"{title} (No link)")
     return news_items
 
 def split_message(message, max_length=4000):
@@ -45,30 +53,34 @@ def tax(update, context):
     try:
         taxindia_news = fetch_taxindiaonline()
         messages.append("📰 TaxIndiaOnline News:\n" + "\n\n".join(taxindia_news))
-    except Exception:
+    except Exception as e:
+        print("TaxIndiaOnline error:", e)
         messages.append("Failed to fetch TaxIndiaOnline news.")
 
     try:
         et_news = fetch_rss_feed("https://economictimes.indiatimes.com/rss/tax/rssfeeds/1145409.cms")
         messages.append("📰 Economic Times - Tax:\n" + "\n\n".join(et_news))
-    except Exception:
+    except Exception as e:
+        print("ET error:", e)
         messages.append("Failed to fetch Economic Times news.")
 
     try:
         livemint_news = fetch_rss_feed("https://www.livemint.com/rss/news/policy.xml")
         messages.append("📰 LiveMint - Policy:\n" + "\n\n".join(livemint_news))
-    except Exception:
+    except Exception as e:
+        print("LiveMint error:", e)
         messages.append("Failed to fetch LiveMint news.")
 
     try:
         bs_news = fetch_rss_feed("https://www.business-standard.com/rss/economy-106.rss")
         messages.append("📰 Business Standard - Tax:\n" + "\n\n".join(bs_news))
-    except Exception:
+    except Exception as e:
+        print("Business Standard error:", e)
         messages.append("Failed to fetch Business Standard news.")
 
     full_message = "\n\n---\n\n".join(messages)
     for chunk in split_message(full_message):
-        update.message.reply_text(chunk)
+        update.message.reply_text(chunk, disable_web_page_preview=True)
 
 def start(update, context):
     update.message.reply_text("Hi! Meesho Tax bot is here. Use /tax to get latest tax news.")
