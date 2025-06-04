@@ -1,5 +1,10 @@
+import os
+from threading import Thread
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Hi! Tax bot is here.")
+    update.message.reply_text("Hi! Meesho Tax bot is here.")
 
 def tax(update: Update, context: CallbackContext):
     update.message.reply_text("Here is your latest tax update: GST filing deadline is 10th June.")
