@@ -10,11 +10,10 @@ app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    print("Error: BOT_TOKEN not set")
-    exit(1)
+    raise RuntimeError("Error: BOT_TOKEN not set")
 
 bot = Bot(token=BOT_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=0)
+dispatcher = Dispatcher(bot, None, workers=4)  # workers > 0 for async callbacks
 
 def fetch_taxindiaonline():
     url = "https://taxindiaonline.com/RC2/TaxNews.asp"
@@ -88,7 +87,8 @@ def index():
     return "Bot is running."
 
 if __name__ == "__main__":
-    # Set webhook URL here or via other method (platform-specific)
-    # Example:
-    # bot.set_webhook(url="https://yourdomain.com/" + BOT_TOKEN)
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # Replace this URL with your actual Render app URL before deploying
+    WEBHOOK_URL = f"https://telegramtax.onrender.com/{8107230560:AAFAkk7OgTTCuheki8z58dm1ei3hPY8e9hc}"
+    bot.set_webhook(url=WEBHOOK_URL)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
