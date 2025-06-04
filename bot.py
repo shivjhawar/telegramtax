@@ -1,32 +1,37 @@
 import os
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "Hello! I'm your Tax Update Bot. Send /today to get today's tax updates."
-    )
+app = Flask(__name__)
 
-def today(update: Update, context: CallbackContext):
-    # Placeholder message, we will add real scraping later
-    update.message.reply_text("Today's tax updates will be here soon!")
+@app.route('/')
+def index():
+    return "Bot is running"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Hi! Tax bot is here.")
 
 def main():
-    print("Bot is starting...")
-
-    BOT_TOKEN = os.getenv("BOT_TOKEN")
-    if not BOT_TOKEN:
-        print("Error: BOT_TOKEN environment variable not set.")
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        print("Error: BOT_TOKEN not set")
         return
 
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+    updater = Updater(token, use_context=True)
+    dp = updater.dispatcher
 
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("today", today))
+    dp.add_handler(CommandHandler("start", start))
+
+    Thread(target=run_flask).start()  # Start Flask server in background
 
     updater.start_polling()
     updater.idle()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
