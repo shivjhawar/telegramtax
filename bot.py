@@ -2,6 +2,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import feedparser
+from urllib.parse import quote
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler
@@ -18,31 +19,35 @@ dispatcher = Dispatcher(bot, None, workers=0)
 
 def fetch_taxindiaonline():
     url = "https://taxindiaonline.com/RC2/TaxNews.asp"
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     news_items = []
     for a_tag in soup.select("table tr td a")[:5]:
         title = a_tag.text.strip()
         href = a_tag.get('href')
-        if href:
+        if href and title:
             link = "https://taxindiaonline.com/RC2/" + href
             news_items.append(f"{title}\n{link}")
-        else:
-            news_items.append(f"{title} (No link found)")
     return news_items
 
 def fetch_rss_feed(feed_url, max_items=5):
     news_items = []
     feed = feedparser.parse(feed_url)
     for entry in feed.entries[:max_items]:
-        title = entry.get("title", "No Title")
-        link = entry.get("link", "")
-        if link:
+        title = entry.get("title", "").strip()
+        link = entry.get("link", "").strip()
+        if title and link:
             news_items.append(f"{title}\n{link}")
-        else:
-            news_items.append(f"{title} (No link)")
     return news_items
+
+def fetch_google_news(query="tax india", max_items=5):
+    feed_url = f"https://news.google.com/rss/search?q={quote(query)}&hl=en-IN&gl=IN&ceid=IN:en"
+    return fetch_rss_feed(feed_url, max_items)
+
+def fetch_pib_news(max_items=5):
+    feed_url = "https://pib.gov.in/PressReleseRSS.aspx"
+    return fetch_rss_feed(feed_url, max_items)
 
 def split_message(message, max_length=4000):
     return [message[i:i+max_length] for i in range(0, len(message), max_length)]
@@ -51,8 +56,22 @@ def tax(update, context):
     messages = []
 
     try:
+        google_news = fetch_google_news()
+        messages.append("📰 Google News - Tax India:\n" + "\n\n".join(google_news))
+    except Exception as e:
+        print("Google News error:", e)
+        messages.append("Failed to fetch Google News.")
+
+    try:
+        pib_news = fetch_pib_news()
+        messages.append("📰 PIB - Govt. News:\n" + "\n\n".join(pib_news))
+    except Exception as e:
+        print("PIB error:", e)
+        messages.append("Failed to fetch PIB news.")
+
+    try:
         taxindia_news = fetch_taxindiaonline()
-        messages.append("📰 TaxIndiaOnline News:\n" + "\n\n".join(taxindia_news))
+        messages.append("📰 TaxIndiaOnline:\n" + "\n\n".join(taxindia_news))
     except Exception as e:
         print("TaxIndiaOnline error:", e)
         messages.append("Failed to fetch TaxIndiaOnline news.")
@@ -75,7 +94,7 @@ def tax(update, context):
         bs_news = fetch_rss_feed("https://www.business-standard.com/rss/economy-106.rss")
         messages.append("📰 Business Standard - Tax:\n" + "\n\n".join(bs_news))
     except Exception as e:
-        print("Business Standard error:", e)
+        print("BS error:", e)
         messages.append("Failed to fetch Business Standard news.")
 
     full_message = "\n\n---\n\n".join(messages)
