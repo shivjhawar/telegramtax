@@ -88,7 +88,7 @@ def index():
 
 if __name__ == "__main__":
     # Replace this URL with your actual Render app URL before deploying
-    WEBHOOK_URL = f"https://telegramtax.onrender.com/{8107230560:AAFAkk7OgTTCuheki8z58dm1ei3hPY8e9hc}"
+    WEBHOOK_URL = f"https://telegramtax.onrender.com/8107230560:AAFAkk7OgTTCuheki8z58dm1ei3hPY8e9hc"
     bot.set_webhook(url=WEBHOOK_URL)
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
