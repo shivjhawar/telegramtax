@@ -1,7 +1,6 @@
 import os
 import feedparser
 import requests
-from bs4 import BeautifulSoup
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler
@@ -45,39 +44,20 @@ def send_news(update, context, topic_title, query):
     except Exception as e:
         update.message.reply_text(f"❌ Error fetching news for {topic_title}.\nDetails: {e}")
 
-def scrape_tax_updates():
-    # Scrape from 2–3 simple sources. More can be added similarly.
-    sources = {
-        "ClearTax": "https://cleartax.in/s/latest-news",
-        "Tax Management India": "https://www.taxmanagementindia.com/"
-    }
-    results = []
-
-    for name, url in sources.items():
+def fetch_rss_updates(feed_urls, max_items=5):
+    updates = []
+    for name, url in feed_urls.items():
         try:
-            resp = requests.get(url, timeout=10)
-            soup = BeautifulSoup(resp.content, "html.parser")
-
-            if "cleartax" in url:
-                headlines = soup.select("a.block")[:5]
-                results.append(f"📌 {name}:")
-                for h in headlines:
-                    title = h.get_text(strip=True)
-                    link = "https://cleartax.in" + h.get("href")
-                    results.append(f"• [{title}]({link})")
-
-            elif "taxmanagementindia" in url:
-                headlines = soup.select("div.news a")[:5]
-                results.append(f"📌 {name}:")
-                for h in headlines:
-                    title = h.get_text(strip=True)
-                    link = "https://www.taxmanagementindia.com" + h.get("href")
-                    results.append(f"• [{title}]({link})")
-
+            feed = feedparser.parse(url)
+            entries = feed.entries[:max_items]
+            updates.append(f"📌 *{name}*")
+            for entry in entries:
+                title = entry.title
+                link = entry.link
+                updates.append(f"• [{title}]({link})")
         except Exception as e:
-            results.append(f"❌ Error scraping {name}: {e}")
-
-    return "\n".join(results)
+            updates.append(f"❌ Error fetching from {name}: {e}")
+    return "\n".join(updates)
 
 # ------------------ Command Handlers ------------------
 
@@ -88,7 +68,7 @@ def start(update, context):
         "🧾 /tax – Latest Indian & global tax news\n"
         "⚖️ /caselaws – Recent tax case laws\n"
         "📈 /ipo – Latest Indian IPO news\n"
-        "🧮 /taxupdate – Scraped updates from top Indian tax websites\n"
+        "🧮 /taxupdate – Curated tax updates from top Indian sites\n"
         "🧺 /meesho – Latest Google News about Meesho"
     )
 
@@ -111,8 +91,13 @@ def meesho(update, context):
     send_news(update, context, "🧺 Meesho News", "Meesho")
 
 def taxupdate(update, context):
+    feed_sources = {
+        "TaxGuru": "https://taxguru.in/feed",
+        "CA Club India": "https://www.caclubindia.com/rss/feed_rss.asp?type=popular",
+        "ClearTax Blog": "https://cleartax.in/s/rss"
+    }
     try:
-        updates = scrape_tax_updates()
+        updates = fetch_rss_updates(feed_sources)
         for chunk in split_message(updates):
             update.message.reply_text(chunk, parse_mode="Markdown", disable_web_page_preview=True)
     except Exception as e:
@@ -127,7 +112,7 @@ dispatcher.add_handler(CommandHandler("ipo", ipo))
 dispatcher.add_handler(CommandHandler("meesho", meesho))
 dispatcher.add_handler(CommandHandler("taxupdate", taxupdate))
 
-# ------------------ Webhook & Flask ------------------
+# ------------------ Webhook + Index ------------------
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
