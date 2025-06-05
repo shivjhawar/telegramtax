@@ -1,5 +1,7 @@
 import os
 import feedparser
+import requests
+from bs4 import BeautifulSoup
 from flask import Flask, request
 from telegram import Bot, Update
 from telegram.ext import Dispatcher, CommandHandler
@@ -14,11 +16,9 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot, None, workers=0)
 
-
-# ------------- Utility Functions ------------------
+# ------------------ Utility Functions ------------------
 
 def fetch_google_news_rss(query, max_items=5):
-    """Fetch Google News RSS feed based on a search query."""
     query_encoded = query.replace(" ", "+")
     url = f"https://news.google.com/rss/search?q={query_encoded}&hl=en-IN&gl=IN&ceid=IN:en"
     feed = feedparser.parse(url)
@@ -26,18 +26,12 @@ def fetch_google_news_rss(query, max_items=5):
     news_items = []
     for entry in feed.entries[:max_items]:
         title = entry.title
-        link = entry.link
-        if "google.com" in link:
-            # Google redirects, fix actual link
-            link = entry.link.split('url=')[-1] if 'url=' in entry.link else entry.link
+        link = entry.link.split('url=')[-1] if 'url=' in entry.link else entry.link
         news_items.append(f"📰 {title}\n🔗 {link}")
     return news_items
 
-
 def split_message(message, max_length=4096):
-    """Splits long messages into chunks Telegram can handle."""
     return [message[i:i+max_length] for i in range(0, len(message), max_length)]
-
 
 def send_news(update, context, topic_title, query):
     try:
@@ -51,8 +45,41 @@ def send_news(update, context, topic_title, query):
     except Exception as e:
         update.message.reply_text(f"❌ Error fetching news for {topic_title}.\nDetails: {e}")
 
+def scrape_tax_updates():
+    # Scrape from 2–3 simple sources. More can be added similarly.
+    sources = {
+        "ClearTax": "https://cleartax.in/s/latest-news",
+        "Tax Management India": "https://www.taxmanagementindia.com/"
+    }
+    results = []
 
-# ------------- Command Handlers ------------------
+    for name, url in sources.items():
+        try:
+            resp = requests.get(url, timeout=10)
+            soup = BeautifulSoup(resp.content, "html.parser")
+
+            if "cleartax" in url:
+                headlines = soup.select("a.block")[:5]
+                results.append(f"📌 {name}:")
+                for h in headlines:
+                    title = h.get_text(strip=True)
+                    link = "https://cleartax.in" + h.get("href")
+                    results.append(f"• [{title}]({link})")
+
+            elif "taxmanagementindia" in url:
+                headlines = soup.select("div.news a")[:5]
+                results.append(f"📌 {name}:")
+                for h in headlines:
+                    title = h.get_text(strip=True)
+                    link = "https://www.taxmanagementindia.com" + h.get("href")
+                    results.append(f"• [{title}]({link})")
+
+        except Exception as e:
+            results.append(f"❌ Error scraping {name}: {e}")
+
+    return "\n".join(results)
+
+# ------------------ Command Handlers ------------------
 
 def start(update, context):
     update.message.reply_text(
@@ -60,7 +87,9 @@ def start(update, context):
         "Use the following commands:\n"
         "🧾 /tax – Latest Indian & global tax news\n"
         "⚖️ /caselaws – Recent tax case laws\n"
-        "📈 /ipo – Latest Indian IPO news"
+        "📈 /ipo – Latest Indian IPO news\n"
+        "🧮 /taxupdate – Scraped updates from top Indian tax websites\n"
+        "🧺 /meesho – Latest Google News about Meesho"
     )
 
 def tax(update, context):
@@ -78,16 +107,27 @@ def caselaws(update, context):
 def ipo(update, context):
     send_news(update, context, "Latest IPO News in India", "latest IPO India")
 
+def meesho(update, context):
+    send_news(update, context, "🧺 Meesho News", "Meesho")
 
-# ------------- Register Handlers ------------------
+def taxupdate(update, context):
+    try:
+        updates = scrape_tax_updates()
+        for chunk in split_message(updates):
+            update.message.reply_text(chunk, parse_mode="Markdown", disable_web_page_preview=True)
+    except Exception as e:
+        update.message.reply_text(f"❌ Error fetching tax updates.\nDetails: {e}")
+
+# ------------------ Register Handlers ------------------
 
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("tax", tax))
 dispatcher.add_handler(CommandHandler("caselaws", caselaws))
 dispatcher.add_handler(CommandHandler("ipo", ipo))
+dispatcher.add_handler(CommandHandler("meesho", meesho))
+dispatcher.add_handler(CommandHandler("taxupdate", taxupdate))
 
-
-# ------------- Webhook + Index Routes ------------------
+# ------------------ Webhook & Flask ------------------
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
